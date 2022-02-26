@@ -2,6 +2,8 @@
 
 class SnakesHungerGames
 {
+    public const DEFAULT_STEP_LIMIT = 20;
+
     protected int $width;
     protected int $height;
 
@@ -18,14 +20,29 @@ class SnakesHungerGames
     protected ?Snake $winner = null;
 
     /**
+     * Ограничение на кол-во шагов змеек в ходе партии (чтобы не зациклиться, если боты или юзеры управляющие змейками слишком тупые)
+     * @var int
+     */
+    protected int $stepLimit;
+
+    /**
+     * Счетчик шагов змеек
+     * @var int
+     */
+    protected int $stepCounter = 0;
+
+    /**
+     * @fixme Нет проверки выхода змеек за пределы карты
      * PlayingMap constructor.
      * @param int $width
      * @param int $height
+     * @param int $stepLimit число шагов доступных змейкам чтобы играть и определить победителя, иначе игра завершается
      */
-    public function __construct(int $width, int $height)
+    public function __construct(int $width, int $height, int $stepLimit = self::DEFAULT_STEP_LIMIT)
     {
         $this->width = $width;
         $this->height = $height;
+        $this->stepLimit = $stepLimit;
     }
 
     /**
@@ -77,10 +94,14 @@ class SnakesHungerGames
 
     /**
      *
-     * @return bool возвращает true если игра закончена и объявлен победитель
+     * @return bool возвращает true если игра закончена или/и объявлен победитель
      */
     public function tick() : bool
     {
+        if ($this->stepCounter >= $this->stepLimit) {
+            return true;
+        }
+
         if (!($countOfSnakes = count($this->snakes))) {
             throw new RuntimeException('Can\'t start game without any snakes');
         }
@@ -98,6 +119,8 @@ class SnakesHungerGames
             $this->checkSnakesEatEachOther($snakesTookStep, $snake);
             $snakesTookStep[] = $snake;
         }
+
+        $this->stepCounter++;
 
         return false;
     }
@@ -122,45 +145,6 @@ class SnakesHungerGames
 
 class SnakeHead extends SnakeNode
 {
-    public const
-        ROTATION_LEFT = 'left',
-        ROTATION_RIGHT = 'right',
-        ROTATION_TOP = 'top',
-        ROTATION_BOTTOM = 'bottom';
-
-    const ALLOW_ROTATION = [
-        self::ROTATION_BOTTOM,
-        self::ROTATION_LEFT,
-        self::ROTATION_RIGHT,
-        self::ROTATION_TOP
-    ];
-
-    protected string $rotation;
-
-    public function __construct(int $coordinateX, int $coordinateY, string $rotation = self::ROTATION_TOP)
-    {
-        $this->validateRotation($rotation);
-        parent::__construct($coordinateX, $coordinateY);
-    }
-
-
-    protected function validateRotation(string $rotation)
-    {
-        if (!in_array(strtolower($rotation), self::ALLOW_ROTATION)) {
-            throw new InvalidArgumentException(sprintf('Don\'t support rotation: %s allow: %s', $rotation, implode(',', self::ALLOW_ROTATION)));
-        }
-
-        $this->rotation = $rotation;
-    }
-
-    /**
-     * @return string
-     */
-    public function getRotation() : string
-    {
-        return $this->rotation;
-    }
-
     public function setCoordinateX(int $x) : self
     {
         $this->coordinateX = $x;
@@ -172,6 +156,13 @@ class SnakeHead extends SnakeNode
         $this->coordinateY = $y;
         return $this;
     }
+
+    public function setRotation(string $rotation) : self
+    {
+        $this->validateRotation($rotation);
+        $this->rotation = $rotation;
+        return $this;
+    }
 }
 
 class SnakeNode
@@ -179,16 +170,40 @@ class SnakeNode
     protected int $coordinateX;
     protected int $coordinateY;
 
-    /**
-     * @todo придумать как реализовать механизм проверки выхода змеи за пределы карты
-     * SnakeNode constructor.
-     * @param int $coordinateX
-     * @param int $coordinateY
-     */
-    public function __construct(int $coordinateX, int $coordinateY)
+    public const
+        ROTATION_LEFT = 'left',
+        ROTATION_RIGHT = 'right',
+        ROTATION_TOP = 'top',
+        ROTATION_BOTTOM = 'bottom';
+
+    public const ALLOW_ROTATION = [
+        self::ROTATION_BOTTOM,
+        self::ROTATION_LEFT,
+        self::ROTATION_RIGHT,
+        self::ROTATION_TOP
+    ];
+
+    protected string $rotation;
+
+    public function __construct(int $coordinateX, int $coordinateY, string $rotation = self::ROTATION_TOP)
     {
+        $this->validateRotation($rotation);
         $this->coordinateX = $coordinateX;
         $this->coordinateY = $coordinateY;
+    }
+
+    protected function validateRotation(string $rotation)
+    {
+        if (!in_array(strtolower($rotation), self::ALLOW_ROTATION)) {
+            throw new InvalidArgumentException(sprintf('Don\'t support rotation: %s allow: %s', $rotation, implode(',', self::ALLOW_ROTATION)));
+        }
+
+        $this->rotation = $rotation;
+    }
+
+    public function getRotation() : string
+    {
+        return $this->rotation;
     }
 
     public function getCoordinateX() : int
@@ -217,15 +232,15 @@ class Snake
     protected array $body = [];
 
     /**
-     * todo: невозможность установки ротации змеи, получить параметр ротации и пробросить в SnakeHead
-     * todo: задекларировать где нибудь что в процессе создания змейки необходимо пустое пространство в одну клетку ( в зависимости от дефолтной длины змеи )
+     * todo: реализовать проверку на наличие пустого пространства вокруг змейки в процессе инициализации body
      * Snake constructor.
      * @param int $coordinateHeadX
      * @param int $coordinateHeadY
+     * @param string $rotation
      */
-    public function __construct(int $coordinateHeadX, int $coordinateHeadY)
+    public function __construct(int $coordinateHeadX, int $coordinateHeadY, string $rotation = SnakeNode::ROTATION_TOP)
     {
-        $this->head = new SnakeHead($coordinateHeadX, $coordinateHeadY);
+        $this->head = new SnakeHead($coordinateHeadX, $coordinateHeadY, $rotation);
         $this->id = self::$countOfSnake++;
         $this->initializeBody();
     }
@@ -237,17 +252,47 @@ class Snake
 
     protected function initializeBody() : void
     {
-        $this->body[] = new SnakeNode($this->head->getCoordinateX() + 0, $this->head->getCoordinateY() + 1);
+        $this->body[] = $this->getNodeForAppend($this->head);
+    }
+
+    protected function getNodeForAppend(SnakeNode $node) : SnakeNode
+    {
+        $appendNode = null;
+
+        /** Добавляем к хвосту ещё один отрезок, имеющий тот же вектор движения что хвостовая нода змейки **/
+        switch ($node->getRotation()) {
+            case SnakeNode::ROTATION_TOP:
+                $appendNode = new SnakeNode($node->getCoordinateX(), $node->getCoordinateY() - 1, $node->getRotation());
+                break;
+
+            case SnakeNode::ROTATION_RIGHT:
+                $appendNode = new SnakeNode($node->getCoordinateX() - 1, $node->getCoordinateY(), $node->getRotation());
+                break;
+
+            case SnakeNode::ROTATION_LEFT:
+                $appendNode = new SnakeNode($node->getCoordinateX() + 1, $node->getCoordinateY(), $node->getRotation());
+                break;
+
+            case SnakeNode::ROTATION_BOTTOM:
+                $appendNode = new SnakeNode($node->getCoordinateX(), $node->getCoordinateY() + 1, $node->getRotation());
+                break;
+        }
+
+        if ($appendNode == null) {
+            throw new RuntimeException(sprintf('Don\'t except value for rotation: %s, expect one of: %s', $node->getRotation(), implode(',', SnakeHead::ALLOW_ROTATION)));
+        }
+
+        return $appendNode;
     }
 
     /**
-     * @todo: змейка может расти как аппендом ноды к голове, так и к хвосту, в зависимости от того находится ли голова у края карты
+     * @fixme: змейка растёт посредством добавления к хвосту нового отрезка, поэтому возможны ситуации где хвост находится к края карты и увелечение длины змейки приведёт к фатальной ошибке
      * @return int
      */
     public function growUp() : int
     {
         $tailOfSnake = end($this->body);
-        $this->body[] = new SnakeNode($tailOfSnake->getCoordinateX() + 0, $tailOfSnake->getCoordinateY() + 1);
+        $this->body[] = $this->getNodeForAppend($tailOfSnake);
 
         return count($this->body);
     }
@@ -267,7 +312,7 @@ class Snake
         $this->removeTail();
 
         /** Добавляем новую ноду в начало тела змеи, что бы скомпенсировать удаление хвоста */
-        $preHeadNode = new SnakeNode($this->head->getCoordinateX(), $this->head->getCoordinateY());
+        $preHeadNode = new SnakeNode($this->head->getCoordinateX(), $this->head->getCoordinateY(), $this->head->getRotation());
         array_unshift($this->body, $preHeadNode);
 
         /**
@@ -291,6 +336,16 @@ class Snake
                 $this->head->setCoordinateY($this->head->getCoordinateY() - 1);
                 break;
         }
+    }
+
+    /**
+     * @param string $rotation
+     * @return Snake
+     */
+    public function setRotation(string $rotation) : self
+    {
+        $this->head->setRotation($rotation);
+        return $this;
     }
 
     /**
@@ -323,12 +378,15 @@ ini_set('xdebug.var_display_max_children', 256);
 ini_set('xdebug.var_display_max_data', 1024);
 
 $game = new SnakesHungerGames(20, 20);
-$game->addSnake(new Snake(5, 5));
-$game->addSnake(new Snake(5, 4));
 
+$firstSnake = new Snake(5, 5);
+$secondSnake = new Snake(5, 4);
+
+$game->addSnake($firstSnake);
+$game->addSnake($secondSnake);
 
 while ($game->tick() == false);
 
-echo 'Победитель змейка ' . $game->getWinner()->getId() . PHP_EOL;
+echo ($game->getWinner() ? 'Победитель змейка ' . $game->getWinner()->getId() : 'Победителя нет, превышен лимит итераций') . PHP_EOL;
 
 var_dump($game);
